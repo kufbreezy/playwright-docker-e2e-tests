@@ -1,14 +1,15 @@
-# Use official Playwright base image
-FROM mcr.microsoft.com/playwright:v1.43.1-jammy
+FROM node:20
 
-# Set working directory
-WORKDIR /tests
+WORKDIR /app
 
-# Copy tests into container
-COPY tests/ /tests/
+# Install dependencies
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Install dependencies if needed (example only)
-# RUN npm install
+# Add the rest of your app
+COPY . .
 
-# Run Playwright tests by default
+# Optional: expose port
+EXPOSE 3000
+
 CMD ["npx", "playwright", "test"]
