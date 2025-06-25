@@ -3,7 +3,7 @@
 # ------------------------------
 
 # Load env
-include .env
+-include .env
 export
 
 IMAGE_NAME=$(DOCKER_USERNAME)/playwright-tests:latest
