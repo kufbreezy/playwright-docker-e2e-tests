@@ -1,0 +1,21 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: playwright-tests
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      containers:
+        - name: playwright
+          image: kufbreezy/playwright-tests:latest
+          workingDir: /tests
+          command: ["npx", "playwright", "test"]
+          volumeMounts:
+            - name: test-files
+              mountPath: /tests
+      restartPolicy: Never
+      volumes:
+        - name: test-files
+          persistentVolumeClaim:
+            claimName: playwright-test-pvc

@@ -1,0 +1,11 @@
+{
+  "name": "playwright-docker-e2e-tests",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.43.1",
+    "@types/node": "^24.0.4"
+  }
+}

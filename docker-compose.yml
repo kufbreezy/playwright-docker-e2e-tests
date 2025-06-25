@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  playwright-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: playwright-tests
+    volumes:
+      - ./tests:/tests
+    working_dir: /tests
+    command: ["npx", "playwright", "test"]
