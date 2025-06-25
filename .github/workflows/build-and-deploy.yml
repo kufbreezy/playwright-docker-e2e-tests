@@ -1,4 +1,4 @@
-name: Build, Test, Deploy with Slack Alert + K8s
+name: Build, Test, Deploy with Docker Hub + Slack
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
 
 env:
   IMAGE_NAME: playwright-docker-e2e-tests
-  GITHUB_USER: kufbreezy
 
 jobs:
   build:
@@ -28,12 +27,6 @@ jobs:
       run: |
         docker tag ${{ env.IMAGE_NAME }} ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
         docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-
-    - name: 📦 Push to GitHub Packages
-      run: |
-        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ env.GITHUB_USER }} --password-stdin
-        docker tag ${{ env.IMAGE_NAME }} ghcr.io/${{ env.GITHUB_USER }}/${{ env.IMAGE_NAME }}:latest
-        docker push ghcr.io/${{ env.GITHUB_USER }}/${{ env.IMAGE_NAME }}:latest
 
   test:
     runs-on: ubuntu-latest
@@ -103,9 +96,9 @@ jobs:
       run: |
         STATUS="${{ needs.test.result }}"
         if [ "$STATUS" = "success" ]; then
-          TEXT="✅ *CI/CD Pipeline Passed* for repo \`${{ github.repository }}\`"
+          TEXT="✅ *CI/CD Passed* for \`${{ github.repository }}\`"
         else
-          TEXT="❌ *CI/CD Pipeline Failed* for repo \`${{ github.repository }}\`"
+          TEXT="❌ *CI/CD Failed* for \`${{ github.repository }}\`"
         fi
         curl -X POST -H 'Content-type: application/json' \
         --data "{\"text\": \"$TEXT\"}" \
