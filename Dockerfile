@@ -3,8 +3,7 @@ FROM node:20
 WORKDIR /app
 
 # Install dependencies
-COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install --save-dev typescript @playwright/test
 
 # Add the rest of your app
 COPY . .
