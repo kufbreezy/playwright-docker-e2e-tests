@@ -28,7 +28,7 @@ help:
 
 test:
 	@echo "🔁 [TEST] Running Playwright via Docker Compose..."
-	docker-compose --env-file .env up --build --abort-on-container-exit
+	docker compose --env-file .env up --build --abort-on-container-exit
 	@echo "📄 [REPORT] Output: $(HTML_REPORT)"
 	@echo "✅ [DONE] Tests finished."
 
