@@ -113,8 +113,12 @@ jobs:
           KUBECONFIG: $HOME/.kube/config
       - name: 🚀 Deploy to Kubernetes
         run: |
-          sed -i "s|\${{ secrets.DOCKER_USERNAME }}|${{ secrets.DOCKER_USERNAME }}|g" k8s/deployment.yml
+          sed -i "s|\${{ secrets.DOCKER_USERNAME }}|${{ secrets.DOCKER_USERNAME }}|g" k8s/*.yml
+          kubectl apply -f k8s/pvc.yml
+          kubectl apply -f k8s/jobs.yml
+          kubectl apply -f k8s/cronjob.yml
           kubectl apply -f k8s/deployment.yml
+          kubectl wait --for=condition=complete job/playwright-tester-job --timeout=300s
           kubectl rollout status deployment/playwright-tester --timeout=300s
         env:
           KUBECONFIG: $HOME/.kube/config
@@ -138,6 +142,7 @@ jobs:
         run: |
           kubectl get pods -o wide
           kubectl describe deployment playwright-tester
+          kubectl describe job playwright-tester-job
         env:
           KUBECONFIG: $HOME/.kube/config
 
@@ -145,7 +150,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build, test, deploy]
     if: always()
-    
+
     steps:
       - name: 📣 Send Slack Notification
         run: |
