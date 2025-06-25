@@ -12,7 +12,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
@@ -74,21 +74,7 @@ jobs:
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
-      - name: 🔐 Create kubeconfig directory and restore kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > $HOME/.kube/config || {
-            echo "Error: Failed to decode KUBECONFIG_B64. Check if the secret is set and valid."
-            exit 1
-          }
-          chmod 600 $HOME/.kube/config
-          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
-      - name: 🔍 Debug kubeconfig
-        run: |
-          ls -l $HOME/.kube/
-          kubectl config view --minify
-        env:
-          KUBECONFIG: $HOME/.kube/config
+        
       - name: 🔧 Install kubectl
         uses: azure/setup-kubectl@v4
         with:
