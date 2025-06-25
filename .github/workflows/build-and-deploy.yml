@@ -2,9 +2,9 @@ name: Build, Test, Deploy with Docker Hub + Slack
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   IMAGE_NAME: playwright-docker-e2e-tests
@@ -12,84 +12,88 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v3
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
-    - name: 🔐 Docker Hub Login
-      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      - name: 🛠️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: 🏗️ Build Docker image
-      run: docker build -t ${{ env.IMAGE_NAME }} .
+      - name: 🔐 Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: 🚀 Push to Docker Hub
-      run: |
-        docker tag ${{ env.IMAGE_NAME }} ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-        docker push ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+      - name: 🏗 Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   test:
     runs-on: ubuntu-latest
     needs: build
 
     steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v3
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
 
-    - name: 🔧 Setup Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.22'
+      - name: 🔧 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
 
-    - name: 🧪 Setup Node for Playwright
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
+      - name: 🔐 Create .env file from GitHub Secrets
+        run: |
+          echo "BEARER_TOKEN=${{ secrets.BEARER_TOKEN }}" >> .env
+          echo "GITHUB_USER=${{ secrets.GITHUB_USER }}" >> .env
+          echo "SLACK_WEBHOOK=${{ secrets.SLACK_WEBHOOK }}" >> .env
+          echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" >> .env
+          echo "DOCKER_PASSWORD=${{ secrets.DOCKER_PASSWORD }}" >> .env
 
-    - name: 📦 Install Node dependencies
-      run: npm ci
+      - name: ✅ Run Go + Playwright tests
+        run: |
+          docker run --rm \
+            -v $(pwd)/playwright-report:/app/playwright-report \
+            -v $(pwd)/report.html:/app/report.html \
+            --env-file .env \
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
-    - name: 🎭 Install Playwright Browsers
-      run: npx playwright install --with-deps
-
-    - name: 🔐 Create .env file from GitHub Secrets
-      run: |
-        echo "BEARER_TOKEN=${{ secrets.BEARER_TOKEN }}" >> .env
-        echo "GITHUB_USER=${{ secrets.GITHUB_USER }}" >> .env
-        echo "SLACK_WEBHOOK=${{ secrets.SLACK_WEBHOOK }}" >> .env
-        echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" >> .env
-        echo "DOCKER_PASSWORD=${{ secrets.DOCKER_PASSWORD }}" >> .env
-
-    - name: ✅ Run Go + Playwright tests
-      run: make test
-
-    - name: 📊 Upload test artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-report
-        path: |
-          report.html
-          playwright-report/
+      - name: 📊 Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: |
+            report.html
+            playwright-report/
+          retention-days: 7
 
   deploy:
     runs-on: ubuntu-latest
     needs: test
-
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v3
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
-    - name: 🔐 Restore kubeconfig
-      run: |
-        echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > $HOME/.kube/config
-        echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+      - name: 🔐 Restore kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
 
-    - name: 🚀 Deploy to Kubernetes
-      run: |
-        kubectl config use-context minikube
-        kubectl apply -f k8s/deployment.yml
-        kubectl apply -f k8s/service.yml
+      - name: 🚀 Deploy to Kubernetes
+        run: |
+          kubectl config use-context minikube
+          kubectl apply -f k8s/deployment.yml
+          kubectl apply -f k8s/service.yml
 
   notify:
     runs-on: ubuntu-latest
@@ -97,16 +101,16 @@ jobs:
     if: always()
 
     steps:
-    - name: 📣 Send Slack Notification
-      run: |
-        STATUS="${{ needs.test.result }}"
-        if [ "$STATUS" = "success" ]; then
-          TEXT="✅ *CI/CD Passed* for \`${{ github.repository }}\`"
-        else
-          TEXT="❌ *CI/CD Failed* for \`${{ github.repository }}\`"
-        fi
-        curl -X POST -H 'Content-type: application/json' \
-        --data "{\"text\": \"$TEXT\"}" \
-        "$SLACK_WEBHOOK"
-      env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      - name: 📣 Send Slack Notification
+        run: |
+          STATUS="${{ needs.test.result }}"
+          if [ "$STATUS" = "success" ]; then
+            TEXT="✅ *CI/CD Passed* for \`${{ github.repository }}\` (Commit: ${{ github.sha }})"
+          else
+            TEXT="❌ *CI/CD Failed* for \`${{ github.repository }}\` (Commit: ${{ github.sha }})"
+          fi
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\": \"$TEXT\"}" \
+            "${{ secrets.SLACK_WEBHOOK }}"
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
