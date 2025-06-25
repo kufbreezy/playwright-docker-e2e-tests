@@ -41,14 +41,7 @@ jobs:
 
     steps:
       - name: 📥 Checkout code
-        uses: actions/checkout@v3
-
-      - name: 🔧 Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          cache: true
-
+        uses: actions/checkout@v4
       - name: 🔐 Create .env file from GitHub Secrets
         run: |
           echo "BEARER_TOKEN=${{ secrets.BEARER_TOKEN }}" >> .env
@@ -56,8 +49,7 @@ jobs:
           echo "SLACK_WEBHOOK=${{ secrets.SLACK_WEBHOOK }}" >> .env
           echo "DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}" >> .env
           echo "DOCKER_PASSWORD=${{ secrets.DOCKER_PASSWORD }}" >> .env
-
-      - name: ✅ Run Go + Playwright tests
+      - name: ✅ Run Playwright tests
         run: |
           docker run --rm \
             -v $(pwd)/playwright-report:/app/playwright-report \
@@ -82,29 +74,83 @@ jobs:
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
-
-      - name: 🔐 Restore kubeconfig
+      - name: 🔐 Create kubeconfig directory and restore kubeconfig
         run: |
-          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > $HOME/.kube/config
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > $HOME/.kube/config || {
+            echo "Error: Failed to decode KUBECONFIG_B64. Check if the secret is set and valid."
+            exit 1
+          }
           chmod 600 $HOME/.kube/config
           echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
-
+      - name: 🔍 Debug kubeconfig
+        run: |
+          ls -l $HOME/.kube/
+          kubectl config view --minify
+        env:
+          KUBECONFIG: $HOME/.kube/config
+      - name: 🔧 Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+      - name: 🔐 Create Docker image pull secret
+        run: |
+          kubectl create secret docker-registry regcred \
+            --docker-username=${{ secrets.DOCKER_USERNAME }} \
+            --docker-password=${{ secrets.DOCKER_PASSWORD }} \
+            --namespace=default \
+            --dry-run=client -o yaml | kubectl apply -f -
+        env:
+          KUBECONFIG: $HOME/.kube/config
+      - name: 🔐 Create application secrets
+        run: |
+          kubectl create secret generic playwright-secrets \
+            --from-literal=bearer-token=${{ secrets.BEARER_TOKEN }} \
+            --from-literal=github-user=${{ secrets.GITHUB_USER }} \
+            --namespace=default \
+            --dry-run=client -o yaml | kubectl apply -f -
+        env:
+          KUBECONFIG: $HOME/.kube/config
       - name: 🚀 Deploy to Kubernetes
         run: |
-          kubectl config use-context minikube
+          sed -i "s|\${{ secrets.DOCKER_USERNAME }}|${{ secrets.DOCKER_USERNAME }}|g" k8s/deployment.yml
           kubectl apply -f k8s/deployment.yml
-          kubectl apply -f k8s/service.yml
+          kubectl rollout status deployment/playwright-tester --timeout=300s
+        env:
+          KUBECONFIG: $HOME/.kube/config
+      - name: 📊 Collect test results
+        run: |
+          POD_NAME=$(kubectl get pod -l app=playwright -o jsonpath="{.items[0].metadata.name}")
+          kubectl cp ${POD_NAME}:/app/playwright-report ./playwright-report
+          kubectl cp ${POD_NAME}:/app/report.html ./report.html || echo "No report.html found"
+        env:
+          KUBECONFIG: $HOME/.kube/config
+      - name: 📊 Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-test-report
+          path: |
+            report.html
+            playwright-report/
+          retention-days: 7
+      - name: ✅ Verify deployment
+        run: |
+          kubectl get pods -o wide
+          kubectl describe deployment playwright-tester
+        env:
+          KUBECONFIG: $HOME/.kube/config
 
   notify:
     runs-on: ubuntu-latest
     needs: [build, test, deploy]
     if: always()
-
+    
     steps:
       - name: 📣 Send Slack Notification
         run: |
-          STATUS="${{ needs.test.result }}"
-          if [ "$STATUS" = "success" ]; then
+          STATUS="${{ needs.test.result == 'success' && needs.deploy.result == 'success' }}"
+          if [ "$STATUS" = "true" ]; then
             TEXT="✅ *CI/CD Passed* for \`${{ github.repository }}\` (Commit: ${{ github.sha }})"
           else
             TEXT="❌ *CI/CD Failed* for \`${{ github.repository }}\` (Commit: ${{ github.sha }})"

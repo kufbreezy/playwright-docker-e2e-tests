@@ -1,23 +1,47 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: playwright-nightly-tests
+  name: playwright-tester-cronjob
+  namespace: default
 spec:
-  schedule: "0 2 * * *"
+  schedule: "0 0 * * *" # Run daily at midnight
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            app: playwright
         spec:
           containers:
             - name: playwright
-              image: mcr.microsoft.com/playwright:v1.43.1-jammy
-              workingDir: /tests
+              image: ${{ secrets.DOCKER_USERNAME }}/playwright-docker-e2e-tests:latest
               command: ["npx", "playwright", "test"]
+              env:
+                - name: BEARER_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: playwright-secrets
+                      key: bearer-token
+                - name: GITHUB_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: playwright-secrets
+                      key: github-user
+              resources:
+                requests:
+                  memory: "512Mi"
+                  cpu: "500m"
+                limits:
+                  memory: "1Gi"
+                  cpu: "1000m"
               volumeMounts:
-                - name: test-files
-                  mountPath: /tests
-          restartPolicy: Never
+                - name: test-results
+                  mountPath: /app/playwright-report
           volumes:
-            - name: test-files
+            - name: test-results
               persistentVolumeClaim:
                 claimName: playwright-test-pvc
+          imagePullSecrets:
+            - name: regcred
+          restartPolicy: Never
+      backoffLimit: 1

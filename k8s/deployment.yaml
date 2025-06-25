@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: playwright-tester
+  namespace: default
+  labels:
+    app: playwright
 spec:
   replicas: 1
   selector:
@@ -14,12 +17,32 @@ spec:
     spec:
       containers:
         - name: playwright
-          image: mcr.microsoft.com/playwright:v1.43.1-jammy
-          command: ["sleep", "infinity"]
+          image: ${{ secrets.DOCKER_USERNAME }}/playwright-docker-e2e-tests:latest
+          command: ["npx", "playwright", "test"]
+          env:
+            - name: BEARER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: playwright-secrets
+                  key: bearer-token
+            - name: GITHUB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: playwright-secrets
+                  key: github-user
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
           volumeMounts:
-            - name: test-files
-              mountPath: /tests
+            - name: test-results
+              mountPath: /app/playwright-report
       volumes:
-        - name: test-files
+        - name: test-results
           persistentVolumeClaim:
             claimName: playwright-test-pvc
+      imagePullSecrets:
+        - name: regcred
