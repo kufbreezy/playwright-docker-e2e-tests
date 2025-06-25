@@ -1,0 +1,58 @@
+# 🔐 Environment secrets
+.env
+.env.*
+!.env.example
+
+# ⚙️ Go build/test files
+*.out
+*.test
+*.exe
+*.log
+*.coverprofile
+bin/
+vendor/
+
+# 🎭 Playwright
+node_modules/
+playwright-report/
+test-results/
+*.tsbuildinfo
+report.html
+
+# 🐳 Docker artifacts
+*.tar
+*.tar.gz
+*.img
+*.container
+.dockerignore
+
+# ⛵ Kubernetes
+kubeconfig
+.kube/
+kubeconfig.*
+*.yaml.bak
+*.yml.bak
+
+# 🧪 CI/CD
+dist/
+build/
+*.zip
+*.tgz
+coverage/
+__pycache__/
+
+# 🧠 IDE / Editor
+.vscode/
+.idea/
+*.swp
+
+# 🧾 Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 💻 OS-specific
+.DS_Store
+Thumbs.db
